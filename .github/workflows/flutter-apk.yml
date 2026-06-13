@@ -1,0 +1,88 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - "flutter_app/**"
+      - ".github/workflows/flutter-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android shell
+        run: flutter create --platforms=android --org io.lagattix --project-name smart_devices_flutter build_flutter
+
+      - name: Copy Flutter source
+        run: |
+          rm -rf build_flutter/lib
+          cp flutter_app/pubspec.yaml build_flutter/pubspec.yaml
+          cp -R flutter_app/lib build_flutter/lib
+
+      - name: Configure Android permissions
+        working-directory: build_flutter
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+          permissions = """<uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="28" />
+          """
+          if "android.permission.BLUETOOTH_SCAN" not in text:
+              text = text.replace("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">", "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n    " + permissions)
+          text = text.replace('android:label="smart_devices_flutter"', 'android:label="Smart Devices Flutter"')
+          manifest.write_text(text)
+          PY
+
+      - name: Install dependencies
+        working-directory: build_flutter
+        run: flutter pub get
+
+      - name: Build debug APK
+        working-directory: build_flutter
+        run: flutter build apk --debug
+
+      - name: Upload Flutter APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-devices-flutter-debug-apk
+          path: build_flutter/build/app/outputs/flutter-apk/app-debug.apk
+
+      - name: Publish Flutter APK in repository
+        run: |
+          mkdir -p apk
+          cp build_flutter/build/app/outputs/flutter-apk/app-debug.apk apk/flutter-debug.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apk/flutter-debug.apk
+          git diff --cached --quiet || git commit -m "Publish Flutter debug APK [skip ci]"
+          git push
