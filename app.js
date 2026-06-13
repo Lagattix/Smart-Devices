@@ -15,6 +15,18 @@ const navItems = document.querySelectorAll('.nav-item[data-view]'); // Solo quel
 const addDeviceBtn = document.getElementById('add-device-btn');
 const devicesList = document.getElementById('devices-list');
 
+const deviceTypeLabels = {
+    tracker: 'Tracker Salute',
+    audio: 'Audio / Speaker',
+    bluetooth: 'Bluetooth'
+};
+
+const deviceTypeIcons = {
+    tracker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>',
+    audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>',
+    bluetooth: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"></polyline></svg>'
+};
+
 // Auth DOM
 const authScreen = document.getElementById('auth-screen');
 const appContainer = document.getElementById('app-container');
@@ -157,6 +169,51 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     if(auth) auth.signOut();
 });
 
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function getDeviceType(deviceName = '') {
+    const nameLower = deviceName.toLowerCase();
+
+    if (nameLower.includes('watch') || nameLower.includes('band') || nameLower.includes('fit') || nameLower.includes('tracker')) {
+        return 'tracker';
+    }
+
+    if (nameLower.includes('airpods') || nameLower.includes('buds') || nameLower.includes('headphone') || nameLower.includes('speaker') || nameLower.includes('audio') || nameLower.includes('sony') || nameLower.includes('jbl')) {
+        return 'audio';
+    }
+
+    return 'bluetooth';
+}
+
+function getFriendlyDeviceName(device) {
+    const advertisedName = (device && device.name || '').trim();
+    if (advertisedName && advertisedName.toLowerCase() !== 'dispositivo sconosciuto') return advertisedName;
+
+    const shortId = (device && device.id || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+    return shortId ? `Dispositivo Bluetooth ${shortId}` : `Dispositivo Bluetooth ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function normalizeDeviceRecord(device, fallbackId) {
+    const normalizedDevice = {
+        ...device,
+        id: device.id || fallbackId || `bt_${Date.now()}`,
+        connectedAt: device.connectedAt || new Date().toISOString()
+    };
+
+    normalizedDevice.name = getFriendlyDeviceName(normalizedDevice);
+    normalizedDevice.type = normalizedDevice.type || getDeviceType(normalizedDevice.name);
+
+    return normalizedDevice;
+}
+
 // Bluetooth Simulator & Real API
 function runSimulator() {
     const iconContainer = addDeviceBtn.querySelector('.action-icon');
@@ -200,16 +257,13 @@ addDeviceBtn.addEventListener('click', async () => {
             optionalServices: ['battery_service', 'heart_rate'] // Servizi BLE standard
         });
         
-        // Determina il tipo dal nome
-        let devType = 'audio';
-        const nameLower = (device.name || '').toLowerCase();
-        if(nameLower.includes('watch') || nameLower.includes('band') || nameLower.includes('fit') || nameLower.includes('tracker')) {
-            devType = 'tracker';
-        }
+        const friendlyName = getFriendlyDeviceName(device);
+        const devType = getDeviceType(friendlyName);
         
         const newDevice = {
             id: device.id || 'bt_' + Date.now(),
-            name: device.name || 'Dispositivo Sconosciuto',
+            name: friendlyName,
+            rawName: device.name || '',
             type: devType,
             connectedAt: new Date().toISOString()
         };
@@ -240,7 +294,13 @@ document.head.appendChild(style);
 
 // Save Device (Per-User)
 async function saveDevice(device) {
-    appState.devices.push(device);
+    device = normalizeDeviceRecord(device);
+    const existingIndex = appState.devices.findIndex((savedDevice) => savedDevice.id === device.id);
+    if (existingIndex >= 0) {
+        appState.devices[existingIndex] = device;
+    } else {
+        appState.devices.push(device);
+    }
     renderDevices();
     
     if (db && appState.currentUser) {
@@ -253,6 +313,32 @@ async function saveDevice(device) {
     alert(`Dispositivo configurato: ${device.name}`);
 }
 
+async function deleteDevice(deviceId) {
+    const device = appState.devices.find((savedDevice) => savedDevice.id === deviceId);
+    if (!device) return;
+
+    const confirmed = confirm(`Eliminare ${device.name}?`);
+    if (!confirmed) return;
+
+    appState.devices = appState.devices.filter((savedDevice) => savedDevice.id !== deviceId);
+    renderDevices();
+
+    if (db && appState.currentUser) {
+        try {
+            await db.collection("users").doc(appState.currentUser.uid).collection("devices").doc(deviceId).delete();
+        } catch (e) {
+            console.error("Errore eliminazione Firebase", e);
+            alert("Dispositivo rimosso dalla schermata, ma non sono riuscito a cancellarlo dal cloud.");
+        }
+    }
+}
+
+devicesList.addEventListener('click', (event) => {
+    const deleteButton = event.target.closest('.btn-delete-device');
+    if (!deleteButton) return;
+    deleteDevice(deleteButton.dataset.deviceId);
+});
+
 function renderDevices() {
     devicesList.innerHTML = '';
     if (appState.devices.length === 0) {
@@ -261,24 +347,27 @@ function renderDevices() {
     }
 
     appState.devices.forEach(dev => {
-        const isTracker = dev.type === 'tracker';
+        const deviceType = dev.type || 'bluetooth';
+        const typeClass = deviceType === 'tracker' ? 'badge-tracker' : deviceType === 'audio' ? 'badge-audio' : 'badge-bluetooth';
         devicesList.innerHTML += `
             <div class="device-item">
                 <div class="device-item-info">
                     <div class="device-icon">
-                        ${isTracker 
-                            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>'
-                            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>'
-                        }
+                        ${deviceTypeIcons[deviceType] || deviceTypeIcons.bluetooth}
                     </div>
                     <div class="device-details">
-                        <h4>${dev.name}</h4>
+                        <h4>${escapeHtml(dev.name)}</h4>
                         <p>Connesso il ${new Date(dev.connectedAt).toLocaleDateString()}</p>
                     </div>
                 </div>
-                <span class="device-type-badge ${isTracker ? 'badge-tracker' : 'badge-audio'}">
-                    ${isTracker ? 'Tracker Salute' : 'Audio / Speaker'}
-                </span>
+                <div class="device-actions">
+                    <span class="device-type-badge ${typeClass}">
+                        ${deviceTypeLabels[deviceType] || deviceTypeLabels.bluetooth}
+                    </span>
+                    <button type="button" class="btn-delete-device" data-device-id="${escapeHtml(dev.id)}" aria-label="Elimina ${escapeHtml(dev.name)}" title="Elimina dispositivo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg>
+                    </button>
+                </div>
             </div>
         `;
     });
@@ -291,7 +380,7 @@ function loadDevicesFromFirebase() {
     db.collection("users").doc(appState.currentUser.uid).collection("devices").get().then((querySnapshot) => {
         appState.devices = [];
         querySnapshot.forEach((doc) => {
-            appState.devices.push(doc.data());
+            appState.devices.push(normalizeDeviceRecord(doc.data(), doc.id));
         });
         renderDevices();
     });

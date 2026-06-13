@@ -217,15 +217,18 @@ body {
 
 /* Devices List */
 .devices-list { display: flex; flex-direction: column; gap: 1rem; }
-.device-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.05); }
-.device-item-info { display: flex; align-items: center; gap: 1rem; }
+.device-item { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.05); }
+.device-item-info { display: flex; align-items: center; gap: 1rem; min-width: 0; }
 .device-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.2); color: var(--primary); }
 .device-icon svg { width: 20px; height: 20px; }
+.device-details { min-width: 0; }
 .device-details h4 { font-size: 0.95rem; margin-bottom: 0.2rem; }
 .device-details p { font-size: 0.8rem; color: var(--text-secondary); }
 .device-type-badge { padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-align: center; }
 .badge-tracker { background: rgba(239, 68, 68, 0.2); color: #f87171; }
 .badge-audio { background: rgba(29, 185, 84, 0.2); color: #4ade80; }
+.badge-bluetooth { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+.device-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; flex-shrink: 0; }
 .empty-state { text-align: center; padding: 2rem; color: var(--text-secondary); font-size: 0.9rem;}
 
 /* Settings Form */
@@ -293,4 +296,27 @@ body {
 .action-btn:hover .action-icon {
     transform: scale(1.05);
     box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+}
+
+.btn-delete-device {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 0.4rem 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-delete-device:hover {
+    background: var(--accent-red);
+    color: white;
+}
+.btn-delete-device svg { width: 16px; height: 16px; }
+
+@media (max-width: 520px) {
+    .device-item { align-items: flex-start; flex-direction: column; }
+    .device-actions { width: 100%; justify-content: space-between; }
 }
