@@ -147,7 +147,10 @@ class _DevicesPageState extends State<DevicesPage> {
 
     try {
       setState(() => _status = 'Connessione a $name...');
-      await device.connect(timeout: const Duration(seconds: 15));
+      await device.connect(
+        license: License.nonprofit,
+        timeout: const Duration(seconds: 15),
+      );
 
       if (!mounted) return;
       setState(() {
