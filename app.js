@@ -157,9 +157,8 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     if(auth) auth.signOut();
 });
 
-// Bluetooth Simulator & Device Addition
-addDeviceBtn.addEventListener('click', () => {
-    // Animazione bottone
+// Bluetooth Simulator & Real API
+function runSimulator() {
     const iconContainer = addDeviceBtn.querySelector('.action-icon');
     iconContainer.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 0 3.84-10.36L2 8"/></svg>';
     
@@ -183,8 +182,55 @@ addDeviceBtn.addEventListener('click', () => {
         
         // Vai alla Home per vederlo
         document.querySelector('[data-view="dashboard"]').click();
-        
     }, 2000);
+}
+
+addDeviceBtn.addEventListener('click', async () => {
+    // Il Web Bluetooth richiede protocollo HTTPS o Localhost. Su file:// spesso è disabilitato.
+    if (!navigator.bluetooth) {
+        alert("Il tuo browser blocca il Bluetooth aprendo il file localmente (richiede HTTPS). Avvio simulazione temporanea...");
+        runSimulator();
+        return;
+    }
+
+    try {
+        // Richiama il menu nativo del browser
+        const device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: ['battery_service', 'heart_rate'] // Servizi BLE standard
+        });
+        
+        // Determina il tipo dal nome
+        let devType = 'audio';
+        const nameLower = (device.name || '').toLowerCase();
+        if(nameLower.includes('watch') || nameLower.includes('band') || nameLower.includes('fit') || nameLower.includes('tracker')) {
+            devType = 'tracker';
+        }
+        
+        const newDevice = {
+            id: device.id || 'bt_' + Date.now(),
+            name: device.name || 'Dispositivo Sconosciuto',
+            type: devType,
+            connectedAt: new Date().toISOString()
+        };
+        
+        saveDevice(newDevice);
+        if(devType === 'tracker') simulateHealthData();
+        document.querySelector('[data-view="dashboard"]').click();
+
+    } catch (error) {
+        console.error("Errore Bluetooth:", error);
+        if (error.name === 'NotFoundError') {
+            // L'utente ha chiuso il menu senza selezionare nulla
+            return;
+        } else if (error.name === 'SecurityError') {
+            alert("Sicurezza: devi pubblicare l'app su GitHub Pages per usare il Bluetooth reale. Avvio simulazione...");
+            runSimulator();
+        } else {
+            alert("Errore Bluetooth: " + error.message + ". Avvio simulazione...");
+            runSimulator();
+        }
+    }
 });
 
 // Aggiungiamo animazione spin per il loader
