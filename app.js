@@ -26,6 +26,10 @@ const deviceTypeIcons = {
     audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>',
     bluetooth: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"></polyline></svg>'
 };
+const nativeBleServices = {
+    battery: '0000180f-0000-1000-8000-00805f9b34fb',
+    heartRate: '0000180d-0000-1000-8000-00805f9b34fb'
+};
 
 // Auth DOM
 const authScreen = document.getElementById('auth-screen');
@@ -204,7 +208,7 @@ function getFriendlyDeviceName(device) {
 function normalizeDeviceRecord(device, fallbackId) {
     const normalizedDevice = {
         ...device,
-        id: device.id || fallbackId || `bt_${Date.now()}`,
+        id: device.id || device.deviceId || fallbackId || `bt_${Date.now()}`,
         connectedAt: device.connectedAt || new Date().toISOString()
     };
 
@@ -212,6 +216,63 @@ function normalizeDeviceRecord(device, fallbackId) {
     normalizedDevice.type = normalizedDevice.type || getDeviceType(normalizedDevice.name);
 
     return normalizedDevice;
+}
+
+function getNativeBluetoothPlugin() {
+    return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BluetoothLe;
+}
+
+async function requestNativeBluetoothDevice() {
+    const bluetooth = getNativeBluetoothPlugin();
+    if (!bluetooth) return false;
+
+    await bluetooth.initialize({ androidNeverForLocation: true });
+
+    try {
+        const enabled = await bluetooth.isEnabled();
+        const isBluetoothOn = enabled === true || enabled.value === true || enabled.enabled === true;
+        if (!isBluetoothOn) {
+            await bluetooth.requestEnable();
+        }
+    } catch (error) {
+        console.warn("Impossibile verificare lo stato Bluetooth:", error);
+    }
+
+    if (bluetooth.setDisplayStrings) {
+        await bluetooth.setDisplayStrings({
+            scanning: 'Ricerca dispositivi...',
+            cancel: 'Annulla',
+            availableDevices: 'Dispositivi disponibili',
+            noDeviceFound: 'Nessun dispositivo trovato'
+        });
+    }
+
+    const device = await bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [nativeBleServices.battery, nativeBleServices.heartRate]
+    });
+
+    await bluetooth.connect({ deviceId: device.deviceId });
+
+    const friendlyName = getFriendlyDeviceName({
+        id: device.deviceId,
+        name: device.name || device.localName
+    });
+    const devType = getDeviceType(friendlyName);
+
+    const newDevice = {
+        id: device.deviceId,
+        name: friendlyName,
+        rawName: device.name || device.localName || '',
+        type: devType,
+        source: 'capacitor-ble',
+        connectedAt: new Date().toISOString()
+    };
+
+    saveDevice(newDevice);
+    if(devType === 'tracker') simulateHealthData();
+    document.querySelector('[data-view="dashboard"]').click();
+    return true;
 }
 
 // Bluetooth Simulator & Real API
@@ -243,6 +304,15 @@ function runSimulator() {
 }
 
 addDeviceBtn.addEventListener('click', async () => {
+    try {
+        const handledByNativeBluetooth = await requestNativeBluetoothDevice();
+        if (handledByNativeBluetooth) return;
+    } catch (error) {
+        console.error("Errore Bluetooth nativo:", error);
+        alert("Errore Bluetooth nativo: " + (error.message || "connessione non riuscita"));
+        return;
+    }
+
     // Il Web Bluetooth richiede protocollo HTTPS o Localhost. Su file:// spesso è disabilitato.
     if (!navigator.bluetooth) {
         alert("Il tuo browser blocca il Bluetooth aprendo il file localmente (richiede HTTPS). Avvio simulazione temporanea...");

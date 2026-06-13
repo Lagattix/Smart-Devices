@@ -1,0 +1,19 @@
+{
+  "appId": "io.lagattix.smartdevices",
+  "appName": "Smart Devices",
+  "webDir": "dist",
+  "server": {
+    "url": "https://lagattix.github.io/Smart-Devices/",
+    "cleartext": false
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Ricerca dispositivi...",
+        "cancel": "Annulla",
+        "availableDevices": "Dispositivi disponibili",
+        "noDeviceFound": "Nessun dispositivo trovato"
+      }
+    }
+  }
+}
