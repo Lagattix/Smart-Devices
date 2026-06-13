@@ -81,7 +81,7 @@ jobs:
           cp flutter-build.log apk/flutter-build.log || echo "No flutter-build.log was produced" > apk/flutter-build.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apk/flutter-build.log
+          git add -f apk/flutter-build.log
           git diff --cached --quiet || git commit -m "Publish Flutter build log [skip ci]"
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push
@@ -98,7 +98,7 @@ jobs:
           cp build_flutter/build/app/outputs/flutter-apk/app-debug.apk apk/flutter-debug.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apk/flutter-debug.apk
+          git add -f apk/flutter-debug.apk
           git diff --cached --quiet || git commit -m "Publish Flutter debug APK [skip ci]"
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push
