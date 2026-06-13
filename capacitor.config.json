@@ -2,10 +2,6 @@
   "appId": "io.lagattix.smartdevices",
   "appName": "Smart Devices",
   "webDir": "dist",
-  "server": {
-    "url": "https://lagattix.github.io/Smart-Devices/",
-    "cleartext": false
-  },
   "plugins": {
     "BluetoothLe": {
       "displayStrings": {
