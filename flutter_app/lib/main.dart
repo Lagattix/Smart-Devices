@@ -81,17 +81,32 @@ class _DevicesPageState extends State<DevicesPage> {
   Future<void> _requestPermissions() async {
     if (!Platform.isAndroid) return;
 
-    final permissions = <Permission>[
+    final bluetoothResults = await <Permission>[
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ];
+    ].request();
 
-    final results = await permissions.request();
-    final denied = results.entries.where((entry) => !entry.value.isGranted);
-    if (denied.isNotEmpty) {
+    final deniedBluetooth = bluetoothResults.entries
+        .where((entry) => !entry.value.isGranted)
+        .map((entry) => entry.key)
+        .toList();
+
+    if (deniedBluetooth.isNotEmpty) {
+      final permanentlyDenied = bluetoothResults.values.any(
+        (status) => status.isPermanentlyDenied,
+      );
+      if (permanentlyDenied) {
+        throw Exception(
+          'Apri Impostazioni app e abilita "Dispositivi nelle vicinanze"',
+        );
+      }
+
       throw Exception('Permessi Bluetooth non concessi');
     }
+
+    // Android 11 e precedenti possono richiedere la posizione per lo scan BLE.
+    // Non la blocchiamo sui telefoni nuovi, dove non serve e crea falsi errori.
+    await Permission.locationWhenInUse.request();
   }
 
   Future<void> _startScan() async {
@@ -265,7 +280,8 @@ class _DevicesPageState extends State<DevicesPage> {
             const SizedBox(height: 8),
             if (_scanResults.isEmpty)
               const _EmptyState(
-                text: 'Avvia una scansione per trovare dispositivi BLE',
+                text:
+                    'Questa e la versione Flutter nativa. Premi "Cerca dispositivi" per scansionare Bluetooth LE.',
               )
             else
               ..._scanResults.map(
